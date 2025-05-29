@@ -10,51 +10,61 @@ import time
 import tqdm
 import os
 
+
 class Main:
-	def __init__(self, url:str) -> None:
-		self.url = "https://olimpiada.ic.unicamp.br/pratique/p2/"
+    def __init__(self, url: str) -> None:
+        self.url = url
 
-	def execute(self) -> None:
-		"""Método que executa as classes e métodos.
+    def execute(self) -> None:
+        """Executa o pipeline para coletar e salvar questões."""
+        lista_questao = ListaQuestao(self.url)
+        dados = lista_questao.lista_de_questoes(self.url)
 
-		Args:
-			url (str): URL da página com as questões.
+        ajuste_lista_questao = AjusteListaQuestao(dados)
+        dados_ajustados = ajuste_lista_questao.ajuste_lista_questao(dados)
 
-		Returns:
-			None
-		"""		
-		lista_questao = ListaQuestao(self.url)
-		dados = lista_questao.lista_de_questoes(self.url)
+        matriz = DataQuestao(dados_ajustados)
+        dataframe = matriz.questoes(dados_ajustados)
 
-		ajuste_lista_questao = AjusteListaQuestao(dados)
-		dados_ajustados = ajuste_lista_questao.ajuste_lista_questao(dados)
+        dataframe.to_csv('questoes.csv', index=False)
+        print("Dados coletados e salvos em 'questoes.csv'")
+        print(dataframe)
 
-		matriz = DataQuestao(dados_ajustados)
-		dataframe = matriz.questoes(dados_ajustados)
+    def prompts(self, url: str) -> str:
+        """Gera o prompt da questão."""
+        questao = Questao(url).texto()
+        result = Prompt(questao).texto()
+        return result
 
-		dataframe.to_csv('questoes.csv', index=False)
+    def gemini_ia(self, prompt: str) -> str:
+        """Gera o resultado usando o modelo Gemini."""
+        resultado = Gemini(prompt=prompt).generate(prompt)
+        return resultado
 
-		print(dataframe)
 
-	def prompts(self, url:str) -> str:
-		questao = Questao(url).texto()
-		result = Prompt(questao).texto()
-		return result
+if __name__ == "__main__":
+    execute = Main("https://olimpiada.ic.unicamp.br/pratique/p2/")
 
-	def gemini_ia(self,prompt:str) -> str:
-		resultado = Gemini(prompt=prompt).generate(prompt)
-		return resultado
+    # Carregar os dados salvos em 'questoes.csv'
+    dados = pd.read_csv('questoes.csv')
 
-		
+    # Iterar sobre as primeiras 5 URLs
+    data = []
+    for url in tqdm.tqdm(dados['Link'][:20], desc="Processando questões"):
+        prompt = execute.prompts(url)
+        resultado = execute.gemini_ia(prompt)
+        resultado = [item.strip('" \n').strip()
+                     for item in resultado.split(',')]
+        data.append([url] + resultado)
+        print(f"Resultado para {url}:", resultado)
 
-execute = Main("https://olimpiada.ic.unicamp.br/pratique/p2/")
+        # Pausa para evitar sobrecarga
+        time.sleep(3)
+        os.system('cls' if os.name == 'nt' else 'clear')
 
-dados = pd.read_csv('questoes.csv')
-tqdm = tqdm.tqdm(dados['Link'])
-for url in tqdm:
-	prompt = execute.prompts(url)
-	resultado = execute.gemini_ia(prompt)
-	resultado = [item.strip('" \n').strip() for item in resultado.split(',')]
-	print(resultado)
-	time.sleep(3)
-	os.system('cls' if os.name == 'nt' else 'clear')
+    # Criar o DataFrame com os resultados
+    dataframe = pd.DataFrame(data, columns=[
+        'URL', 'Dificuldade', 'Assunto', 'Subassunto', 'Tópico', 'Prova'
+    ])
+    dataframe.to_csv('resultado.csv', index=False)
+    print("Resultados salvos em 'resultado.csv'")
